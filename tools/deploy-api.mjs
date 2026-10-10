@@ -308,10 +308,24 @@ function explainPermissions(r) {
   try {
     git(["config", "user.name", login], { quiet: true });
     git(["config", "user.email", email], { quiet: true });
-    git(["commit", "--amend", "--reset-author", "--no-edit"], { quiet: true });
-    ok(`提交作者已设为 ${login} <${email}>`);
+
+    // 只在作者确实不对时才改写提交。
+    // 无条件 amend 会给已推送的提交换一个新哈希，导致本地与远程分叉、推送被拒。
+    let needAmend = true;
+    try {
+      const curName  = git(["log", "-1", "--format=%an"], { quiet: true }).trim();
+      const curEmail = git(["log", "-1", "--format=%ae"], { quiet: true }).trim();
+      needAmend = (curName !== login || curEmail !== email);
+    } catch { needAmend = true; }
+
+    if (needAmend) {
+      git(["commit", "--amend", "--reset-author", "--no-edit"], { quiet: true });
+      ok(`提交作者已设为 ${login} <${email}>`);
+    } else {
+      info("提交作者已经是你的 GitHub 身份，跳过改写");
+    }
   } catch (e) {
-    info("改写提交作者失败（不影响推送）：" + e.message);
+    info("处理提交作者失败（不影响推送）：" + e.message);
   }
 
   // 之后如果又改了文件，这里会自动提交，省得再手工跑一遍
@@ -350,16 +364,27 @@ function explainPermissions(r) {
     warn(`凭据助手自检未通过：${check.error || JSON.stringify(check)}`);
   }
 
+  const withCred = (cmdArgs) =>
+    ["-c", "credential.helper=", "-c", `credential.helper=${helper}`, ...cmdArgs];
+  const pushArgs = withCred(["push", "-u", "origin", "main"]);
+
   try {
-    git(["-c", "credential.helper=", "-c", `credential.helper=${helper}`,
-         "push", "-u", "origin", "main"]);
+    git(pushArgs);
     ok("推送成功");
-  } catch (e) {
-    die(`推送失败。\n` +
-        `  · 网络原因：当前 DNS 可能掺了假 IP，可设 FORCE_IP=<真实IP> 后重跑；\n` +
-        `    git 用的是系统解析，如果 hosts 加速工具把 github.com 指向 127.0.0.1，\n` +
-        `    请先关掉加速工具再重跑。\n` +
-        `  · 鉴权原因：token 需要 repo（经典）或 Contents: Read and write（细粒度）。`);
+  } catch {
+    // 历史分叉（例如远程有本地没有的提交）时，先 rebase 再推
+    warn("推送被拒，尝试 git pull --rebase 后重试");
+    try {
+      git(withCred(["pull", "--rebase", "origin", "main"]));
+      git(pushArgs);
+      ok("推送成功（rebase 后）");
+    } catch {
+      die(`推送失败。\n` +
+          `  · 网络原因：系统 DNS 可能掺了假 IP，git 用的是系统解析；\n` +
+          `    如果 hosts 加速工具把 github.com 指向 127.0.0.1 但它没在跑代理，请关掉它再重跑。\n` +
+          `  · 鉴权原因：token 需要 repo（经典）或 Contents: Read and write（细粒度）。\n` +
+          `  · 分叉原因：可在仓库目录手工执行 git pull --rebase origin main 后再跑本脚本。`);
+    }
   } finally {
     try { fs.unlinkSync(CRED_FILE); } catch { /* 已删除 */ }
   }
