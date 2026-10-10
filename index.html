@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>2048 · 霓虹进化</title>
+<style>
+  :root{
+    --bw: min(92vw, 500px);
+    --gap: clamp(6px, 1.6vw, 12px);
+    --n: 4;
+    --fs: 34px;
+    --bg0:#070b16; --bg1:#0d1424; --line:rgba(120,180,255,.18);
+    --txt:#e8f0ff; --dim:#7f90b0; --acc:#59e0ff; --gold:#ffd76a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0; background:
+      radial-gradient(900px 520px at 12% -8%, #1b2a52 0%, transparent 60%),
+      radial-gradient(760px 520px at 108% 8%, #3a1550 0%, transparent 58%),
+      linear-gradient(180deg,var(--bg0),var(--bg1) 55%,#060910);
+    color:var(--txt);
+    font-family:"Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; justify-content:center; align-items:flex-start;
+    padding:18px 12px 40px; min-height:100%;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:""; position:fixed; inset:-30% -10% auto -10%; height:70%;
+    background:radial-gradient(closest-side, rgba(89,224,255,.10), transparent 70%);
+    pointer-events:none; animation:drift 16s ease-in-out infinite alternate;
+  }
+  @keyframes drift{ from{transform:translate3d(-4%,-2%,0) scale(1)} to{transform:translate3d(6%,4%,0) scale(1.15)} }
+
+  .app{width:var(--bw); position:relative; z-index:1}
+
+  header{display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-bottom:10px}
+  h1{margin:0; font-size:clamp(22px,6vw,32px); letter-spacing:.5px; line-height:1.05;
+     background:linear-gradient(92deg,#7df9ff,#c08bff 55%,#ffd76a);
+     -webkit-background-clip:text; background-clip:text; color:transparent;
+     filter:drop-shadow(0 0 14px rgba(120,200,255,.35))}
+  h1 span{font-size:.5em; letter-spacing:2px; opacity:.75; display:block; margin-top:2px}
+  .scores{display:flex; gap:8px}
+  .box{background:linear-gradient(160deg,rgba(90,150,255,.16),rgba(160,90,255,.10));
+       border:1px solid var(--line); border-radius:12px; padding:6px 12px; text-align:center; min-width:74px}
+  .box label{display:block; font-size:10px; letter-spacing:2px; color:var(--dim)}
+  .box b{font-size:18px; font-variant-numeric:tabular-nums}
+
+  .hud{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px}
+  .stat{background:rgba(255,255,255,.035); border:1px solid var(--line); border-radius:10px;
+        padding:6px 8px; display:flex; justify-content:space-between; align-items:baseline; font-size:12px}
+  .stat span{color:var(--dim)}
+  .stat b{font-size:15px; font-variant-numeric:tabular-nums}
+  .stat.hot b{color:#ffb84d; text-shadow:0 0 10px rgba(255,160,60,.6)}
+
+  .skillbar{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:10px}
+  .skill{position:relative; cursor:pointer; border:1px solid var(--line); border-radius:12px;
+         background:linear-gradient(165deg,rgba(120,180,255,.13),rgba(140,90,255,.07));
+         color:var(--txt); font:inherit; padding:8px 4px 7px; text-align:center;
+         transition:transform .1s, box-shadow .2s, opacity .2s}
+  .skill i{display:block; font-style:normal; font-size:19px; line-height:1.15}
+  .skill u{display:block; text-decoration:none; font-size:11px; margin-top:2px; letter-spacing:.5px}
+  .skill small{display:block; font-size:10px; color:var(--gold); margin-top:1px}
+  .skill:hover:not(:disabled){transform:translateY(-2px); box-shadow:0 6px 18px rgba(80,160,255,.22)}
+  .skill:disabled{opacity:.36; cursor:not-allowed}
+  .skill.armed{box-shadow:0 0 0 2px var(--acc), 0 0 22px rgba(89,224,255,.45); animation:pulse 1s infinite alternate}
+  @keyframes pulse{to{box-shadow:0 0 0 2px var(--acc), 0 0 34px rgba(89,224,255,.8)}}
+
+  .board{position:relative; width:100%; padding:var(--gap); border-radius:18px; touch-action:none;
+         background:linear-gradient(160deg,rgba(30,50,95,.55),rgba(20,20,45,.6));
+         border:1px solid var(--line); box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 0 60px rgba(60,120,255,.08)}
+  .board.aiming{cursor:crosshair; box-shadow:0 0 0 2px var(--acc), 0 18px 50px rgba(0,0,0,.45)}
+  .grid-bg{position:relative; width:100%; aspect-ratio:1/1}
+  .cell{position:absolute; top:0; left:0; width:calc(100% / var(--n)); height:calc(100% / var(--n));
+        transform:translate(calc(var(--c) * 100%), calc(var(--r) * 100%))}
+  .cell::after{content:""; position:absolute; inset:calc(var(--gap) / 2); border-radius:10px;
+               background:rgba(255,255,255,.045); box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}
+  .tiles{position:absolute; inset:var(--gap)}
+  .tile{position:absolute; top:0; left:0; width:calc(100% / var(--n)); height:calc(100% / var(--n));
+        z-index:2; transform:translate(calc(var(--c) * 100%), calc(var(--r) * 100%));
+        transition:transform .13s cubic-bezier(.25,.9,.35,1); will-change:transform}
+  .face{position:absolute; inset:calc(var(--gap) / 2); border-radius:10px; display:flex;
+        align-items:center; justify-content:center; font-weight:800; letter-spacing:-.5px;
+        font-size:var(--fs); font-variant-numeric:tabular-nums; user-select:none;
+        transition:filter .15s}
+  .badge{position:absolute; right:5px; bottom:3px; font-size:9px; letter-spacing:1px; opacity:.85}
+  .tile.dead{z-index:1}
+  .tile.dead .face{filter:brightness(1.5) saturate(.4)}
+  .tile.frozen .face{border:1px solid rgba(190,240,255,.6)}
+  .tile.frozen .face::after{content:""; position:absolute; inset:0; border-radius:inherit;
+     background:repeating-linear-gradient(58deg, rgba(255,255,255,.16) 0 3px, transparent 3px 11px); pointer-events:none}
+  .tile.wild .face{animation:shine 1.6s ease-in-out infinite alternate}
+  @keyframes shine{to{filter:brightness(1.25) saturate(1.3)}}
+  .tile.new .face{animation:appear .17s cubic-bezier(.2,1.6,.4,1) both}
+  @keyframes appear{from{transform:scale(.1); opacity:0} to{transform:scale(1); opacity:1}}
+  .tile.pop .face{animation:bump .18s ease-out}
+  @keyframes bump{0%{transform:scale(1)} 42%{transform:scale(1.16)} 100%{transform:scale(1)}}
+  .tile.thawed .face{animation:thaw .4s ease-out}
+  @keyframes thaw{0%{filter:brightness(2.4) saturate(.2)} 100%{filter:none}}
+
+  .actions{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px}
+  .actions button{font:inherit; font-size:13px; padding:9px 6px; border-radius:11px; cursor:pointer;
+     color:var(--txt); border:1px solid var(--line); background:rgba(255,255,255,.05);
+     transition:background .15s, transform .1s}
+  .actions button:hover{background:rgba(120,180,255,.16); transform:translateY(-1px)}
+  .actions button.primary{background:linear-gradient(120deg,rgba(89,224,255,.28),rgba(180,110,255,.28));
+     border-color:rgba(140,220,255,.5)}
+
+  .toast{position:fixed; left:50%; bottom:26px; transform:translate(-50%,22px); opacity:0;
+     background:rgba(10,20,40,.92); border:1px solid var(--line); color:var(--txt);
+     padding:9px 16px; border-radius:999px; font-size:13px; pointer-events:none;
+     transition:opacity .22s, transform .22s; z-index:40; white-space:nowrap;
+     box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .toast.show{opacity:1; transform:translate(-50%,0)}
+  .banner{position:fixed; left:50%; top:34%; transform:translate(-50%,-50%) scale(.7); opacity:0;
+     pointer-events:none; z-index:41; text-align:center; transition:opacity .3s, transform .3s}
+  .banner.show{opacity:1; transform:translate(-50%,-50%) scale(1)}
+  .banner b{display:block; font-size:clamp(26px,9vw,46px); letter-spacing:3px;
+     background:linear-gradient(92deg,#7df9ff,#ffd76a); -webkit-background-clip:text; background-clip:text; color:transparent;
+     filter:drop-shadow(0 0 22px rgba(120,220,255,.55))}
+  .banner i{font-style:normal; font-size:13px; color:#cfe2ff; opacity:.85; letter-spacing:1px}
+
+  .overlay{position:fixed; inset:0; background:rgba(4,8,18,.78); backdrop-filter:blur(3px);
+     display:flex; align-items:center; justify-content:center; padding:20px; z-index:50}
+  .overlay[hidden]{display:none}
+  .dialog{width:min(430px,92vw); max-height:86vh; overflow:auto; border-radius:18px; padding:22px;
+     background:linear-gradient(165deg,#152040,#0d1122); border:1px solid var(--line);
+     box-shadow:0 24px 70px rgba(0,0,0,.6)}
+  .dialog h2{margin:0 0 8px; font-size:23px}
+  .dialog p{margin:0 0 14px; color:#b9c8e4; font-size:14px; line-height:1.7}
+  .dialog h3{margin:16px 0 6px; font-size:14px; color:var(--acc); letter-spacing:1px}
+  .dialog ul{margin:0; padding-left:20px; color:#b9c8e4; font-size:13.5px; line-height:1.85}
+  .dialog ul b{color:#fff}
+  .dialog .k{display:inline-block; padding:1px 7px; border-radius:6px; background:rgba(255,255,255,.09);
+     border:1px solid var(--line); font-size:12px}
+  .row{display:flex; gap:10px; margin-top:18px}
+  .row button{flex:1; font:inherit; font-size:14px; padding:11px; border-radius:12px; cursor:pointer;
+     color:#04121f; font-weight:700; border:0; background:linear-gradient(120deg,#7df9ff,#a98bff)}
+  .row button.ghost{background:rgba(255,255,255,.08); color:var(--txt); font-weight:500}
+  @media (max-width:420px){ .box{min-width:62px} .box b{font-size:16px} .stat{font-size:11px} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>2048<span>霓虹进化 · NEON EVOLVE</span></h1>
+    <div class="scores">
+      <div class="box"><label>SCORE</label><b id="score">0</b></div>
+      <div class="box"><label>BEST</label><b id="best">0</b></div>
+    </div>
+  </header>
+
+  <div class="hud">
+    <div class="stat"><span>⚡能量</span><b id="energy">0</b></div>
+    <div class="stat"><span>👣步数</span><b id="moves">0</b></div>
+    <div class="stat" id="streakBox"><span>🔥连击</span><b id="streak">0</b></div>
+    <div class="stat"><span>🌀事件</span><b id="evt">20</b></div>
+  </div>
+
+  <div class="skillbar" id="skillbar">
+    <button class="skill" data-skill="boost"><i>⚡</i><u>强化</u><small>30</small></button>
+    <button class="skill" data-skill="bomb"><i>💣</i><u>爆破</u><small>45</small></button>
+    <button class="skill" data-skill="shuffle"><i>🔀</i><u>重排</u><small>35</small></button>
+    <button class="skill" data-skill="undo"><i>⏪</i><u>回溯</u><small>15</small></button>
+  </div>
+
+  <div class="board" id="board">
+    <div class="grid-bg" id="gridBg"></div>
+    <div class="tiles" id="layer"></div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="btnNew">新游戏</button>
+    <button id="btnHint">🔮 提示</button>
+    <button id="btnSize">4 × 4</button>
+    <button id="btnSound">🔊 音效</button>
+    <button id="btnHelp">📖 玩法</button>
+    <button id="btnTheme">🌗 主题</button>
+  </div>
+
+  <p style="color:var(--dim);font-size:12px;line-height:1.7;margin:14px 0 0">
+    方向键 / WASD 移动 · 手机滑动 · <span class="k">Z</span> 撤销 · <span class="k">R</span> 重开 · <span class="k">H</span> 提示
+  </p>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="banner" id="banner"><b id="bannerTitle"></b><i id="bannerSub"></i></div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="dialog">
+    <h2 id="ovTitle">游戏结束</h2>
+    <p id="ovText"></p>
+    <div class="row">
+      <button id="ovMain">再来一局</button>
+      <button class="ghost" id="ovAlt">继续挑战</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="help" hidden>
+  <div class="dialog">
+    <h2>玩法说明</h2>
+    <p>基础规则和经典 2048 一样：滑动合并相同数字，凑出 <b>2048</b>。下面是这一版加进来的东西。</p>
+
+    <h3>⚡ 能量与技能</h3>
+    <ul>
+      <li>每次合并都会积攒能量，数字越大给得越多。</li>
+      <li><b>强化 30</b>：点一个方块，让它升一级（翻倍）。</li>
+      <li><b>爆破 45</b>：点一个方块直接炸掉，冰块也能炸。</li>
+      <li><b>重排 35</b>：打乱场上所有方块的位置。</li>
+      <li><b>回溯 15</b>：退回上一步，最多 15 步。</li>
+    </ul>
+
+    <h3>🔥 连击倍率</h3>
+    <ul>
+      <li>一次滑动合并 2 次以上触发连击，得分按合并次数翻倍（最高 ×4）。</li>
+      <li>连续多步都有合并会累积「连击链」，链条越长能量收入越高。</li>
+    </ul>
+
+    <h3>✦ 万能块 / ❄ 冰封块</h3>
+    <ul>
+      <li><b>✦ 万能块</b>：金色星形，可以和<b>任何</b>方块合并，吃掉对方后翻倍，用完即变普通块。</li>
+      <li><b>❄ 冰封块</b>：冻住不能移动也不能被合并，像一堵墙。它<b>周围发生 3 次合并</b>就会解冻，或者用爆破拆掉。</li>
+    </ul>
+
+    <h3>🌀 随机事件</h3>
+    <ul>
+      <li>每 20 步触发一次：<b>甘霖</b>（两块升级）、<b>寒潮</b>（冰封一块）、<b>丰收</b>（+40 能量）、<b>混沌</b>（全场重排）、<b>陨石</b>（摧毁一块）。</li>
+    </ul>
+
+    <h3>🔮 提示</h3>
+    <ul>
+      <li>内置搜索算法会评估局面，给出它认为最好的一步（不消耗能量）。</li>
+    </ul>
+
+    <div class="row"><button id="helpClose">开始玩</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   2048 霓虹进化 —— 状态
+   ============================================================ */
+var NORMAL = "normal", WILD = "wild", FROZEN = "frozen";
+var DIRS4 = ["up","down","left","right"];
+var SKILLS = { boost:30, bomb:45, shuffle:35, undo:15 };
+var HISTORY_MAX = 15, EVENT_EVERY = 20;
+
+var N = 4;
+var tiles = [];              // 所有方块（含正在消失的 dead 方块）
+var grid = [];               // N×N，指向 tiles 中的对象或 null
+var elMap = new Map();       // tile.id -> DOM
+var nextId = 1;
+
+var score = 0, energy = 0, moves = 0, streak = 0, best = 0;
+var busy = false, gameOver = false, won = false;
+var history = [];
+var eventCountdown = EVENT_EVERY;
+var targetMode = null;       // "boost" | "bomb"
+var soundOn = true, audioCtx = null;
+
+/* ---------- DOM ---------- */
+var $ = function(id){ return document.getElementById(id); };
+var board, layer, gridBg, overlay, toastEl, bannerEl;
+
+function initDom(){
+  board = $("board"); layer = $("layer"); gridBg = $("gridBg");
+  overlay = $("overlay"); toastEl = $("toast"); bannerEl = $("banner");
+}
+
+/* ============================================================
+   基础工具
+   ============================================================ */
+function log2(v){ return Math.log(v) / Math.LN2; }
+function makeGrid(){ var g = [], r, c; for(r=0;r<N;r++){ g.push([]); for(c=0;c<N;c++) g[r].push(null); } return g; }
+function rebuildGrid(){ grid = makeGrid(); for(var i=0;i<tiles.length;i++){ var t = tiles[i]; if(!t.dead) grid[t.r][t.c] = t; } }
+function emptyCells(){ var a=[],r,c; for(r=0;r<N;r++) for(c=0;c<N;c++) if(!grid[r][c]) a.push([r,c]); return a; }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffleArr(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+
+/* ============================================================
+   方块模型
+   ============================================================ */
+function addTile(r,c,value,type){
+  var t = { id: nextId++, value: value, type: type || NORMAL,
+            thaw: (type === FROZEN ? 3 : 0), r: r, c: c,
+            merged:false, dead:false, absorb:null, pop:false, thawed:false };
+  tiles.push(t); grid[r][c] = t;
+  return t;
+}
+function liveTiles(){ return tiles.filter(function(t){ return !t.dead; }); }
+
+function canMerge(a,b){
+  if(a.type === FROZEN || b.type === FROZEN) return false;
+  if(a.type === WILD || b.type === WILD) return true;
+  return a.value === b.value;
+}
+function mergeValue(a,b){
+  if(a.type === WILD && b.type === WILD) return 4;
+  if(a.type === WILD) return b.value * 2;
+  if(b.type === WILD) return a.value * 2;
+  return a.value * 2;
+}
+
+/* 掉落新方块：前期只有普通块，8 步之后开始出现万能块 */
+function spawnTile(){
+  var cells = emptyCells();
+  if(!cells.length) return null;
+  var cell = pick(cells);
+  var isWild = moves >= 8 && Math.random() < 0.10;
+  var value = Math.random() < 0.9 ? 2 : 4;
+  return addTile(cell[0], cell[1], isWild ? 0 : value, isWild ? WILD : NORMAL);
+}
+
+/* ============================================================
+   核心：一次滑动
+   ============================================================ */
+function linesFor(dir){
+  var L = [], i, line, r, c;
+  if(dir === "left" || dir === "right"){
+    for(r=0;r<N;r++){ line=[]; for(c=0;c<N;c++) line.push({r:r,c:c}); if(dir==="right") line.reverse(); L.push(line); }
+  }else{
+    for(c=0;c<N;c++){ line=[]; for(r=0;r<N;r++) line.push({r:r,c:c}); if(dir==="down") line.reverse(); L.push(line); }
+  }
+  return L;
+}
+
+/* 处理一条线：被冰封块切成若干段，段内独立压缩合并 */
+function processLine(line, ctx){
+  var start = 0, seg = [];
+
+  function flush(nextStart){
+    if(seg.length){
+      var dest = line.slice(start);
+      var out = [], i, t, last, v;
+      for(i=0;i<seg.length;i++){
+        t = seg[i];
+        last = out.length ? out[out.length-1] : null;
+        if(last && !last.merged && canMerge(last,t)){
+          v = mergeValue(last,t);
+          last.merged = true;
+          last.value = v;
+          last.type = NORMAL;      // 万能块用完即变普通
+          last.thaw = 0;
+          last.absorb = t;
+          last.pop = true;
+          t.dead = true;
+          ctx.merges++;
+          ctx.gained += v;
+          ctx.energy += Math.max(1, Math.round(log2(v)) - 1);
+          ctx.merged.push(last);
+        }else{
+          out.push(t);
+        }
+      }
+      for(i=0;i<out.length;i++){
+        var d = dest[i];
+        if(out[i].r !== d.r || out[i].c !== d.c) ctx.moved = true;
+        out[i].r = d.r; out[i].c = d.c;
+      }
+      for(i=0;i<out.length;i++){
+        if(out[i].absorb){ out[i].absorb.r = out[i].r; out[i].absorb.c = out[i].c; }
+      }
+    }
+    start = nextStart;
+    seg = [];
+  }
+
+  for(var idx=0; idx<line.length; idx++){
+    var cell = line[idx];
+    var t = grid[cell.r][cell.c];
+    if(t && t.type === FROZEN){ flush(idx + 1); continue; }
+    if(t) seg.push(t);
+  }
+  flush(line.length);
+}
+
+function move(dir){
+  if(busy || gameOver || targetMode || !isPlayable()) return;
+
+  var snap = snapshot();
+  var ctx = { merges:0, gained:0, energy:0, moved:false, merged:[] };
+  var i;
+  for(i=0;i<tiles.length;i++){ tiles[i].merged = false; tiles[i].absorb = null; tiles[i].pop = false; }
+
+  var lines = linesFor(dir);
+  for(i=0;i<lines.length;i++) processLine(lines[i], ctx);
+  if(ctx.merges > 0) ctx.moved = true;
+
+  /* 冰块解冻：周围发生合并就掉一层冰 */
+  var thawed = [];
+  for(i=0;i<tiles.length;i++){
+    var t = tiles[i];
+    if(t.dead || t.type !== FROZEN) continue;
+    for(var k=0;k<ctx.merged.length;k++){
+      var m = ctx.merged[k];
+      if(Math.abs(m.r - t.r) + Math.abs(m.c - t.c) === 1){
+        t.thaw--;
+        if(t.thaw <= 0){ t.type = NORMAL; t.thaw = 0; t.thawed = true; thawed.push(t); }
+        break;
+      }
+    }
+  }
+
+  if(!ctx.moved) return;   // 没有任何变化，不算一步
+
+  rebuildGrid();
+
+  /* 计分：连击倍率 + 连击链加成 */
+  var combo = clamp(ctx.merges, 1, 4);
+  var chain = streak >= 2 ? (1 + Math.min(streak - 1, 8) * 0.1) : 1;
+  var gained = Math.round(ctx.gained * combo * chain);
+  score += gained;
+  energy += ctx.energy + (streak >= 3 ? 1 : 0);
+  moves++;
+  streak = ctx.merges > 0 ? streak + 1 : 0;
+
+  history.push(snap);
+  if(history.length > HISTORY_MAX) history.shift();
+
+  spawnTile();
+
+  if(ctx.merges >= 2) toast("🔥 连击 ×" + combo + "  +" + gained);
+  else if(ctx.merges === 1) toast("+" + gained);
+  if(thawed.length) toast("❄ 冰块解冻了！");
+  sfxMerge(ctx.merges);
+
+  eventCountdown--;
+  if(eventCountdown <= 0){ eventCountdown = EVENT_EVERY; triggerEvent(); }
+
+  syncDOM();
+  updateHUD();
+  settle();
+
+  if(score > best){ best = score; saveBest(); }
+  checkWin();
+  checkOver();
+}
+
+/* 动画收尾：清掉被吃掉的方块，解锁输入 */
+function settle(){
+  busy = true;
+  window.setTimeout(function(){
+    tiles = tiles.filter(function(t){ return !t.dead; });
+    for(var i=0;i<tiles.length;i++){ tiles[i].absorb = null; tiles[i].pop = false; tiles[i].thawed = false; }
+    syncDOM();
+    busy = false;
+  }, 140);
+}
+
+/* ============================================================
+   快照 / 回溯
+   ============================================================ */
+function snapshot(){
+  return {
+    tiles: tiles.filter(function(t){ return !t.dead; }).map(function(t){
+      return { id:t.id, value:t.value, type:t.type, thaw:t.thaw, r:t.r, c:t.c };
+    }),
+    score: score, energy: energy, moves: moves, streak: streak,
+    eventCountdown: eventCountdown, won: won
+  };
+}
+function restore(s){
+  elMap.forEach(function(el){ el.remove(); });
+  elMap.clear();
+  tiles = s.tiles.map(function(o){
+    return { id:o.id, value:o.value, type:o.type, thaw:o.thaw||0, r:o.r, c:o.c,
+             merged:false, dead:false, absorb:null, pop:false, thawed:false };
+  });
+  score = s.score; energy = s.energy; moves = s.moves; streak = s.streak;
+  eventCountdown = s.eventCountdown; won = s.won;
+  gameOver = false;
+  rebuildGrid(); syncDOM(); updateHUD();
+}
+
+/* ============================================================
+   技能
+   ============================================================ */
+function setTarget(mode){
+  if(busy || gameOver) return;
+  if(targetMode === mode){ clearTarget(); return; }
+  if(energy < SKILLS[mode]){ toast("能量不足，还需 " + (SKILLS[mode] - energy) + " ⚡"); return; }
+  targetMode = mode;
+  board.classList.add("aiming");
+  toast(mode === "boost" ? "点一个方块把它强化" : "点一个方块炸掉它");
+  updateHUD();
+}
+function clearTarget(){
+  targetMode = null;
+  board.classList.remove("aiming");
+  updateHUD();
+}
+function doBoost(t){
+  if(busy || gameOver || !t || t.dead) return;
+  if(energy < SKILLS.boost){ toast("能量不足，还需 " + (SKILLS.boost - energy) + " ⚡"); clearTarget(); return; }
+  energy -= SKILLS.boost;
+  if(t.type === WILD){ t.type = NORMAL; t.value = 4; }
+  else { t.value = t.value * 2; }
+  t.pop = true;
+  score += Math.round(log2(t.value) * 2);
+  sfx(660, .1, "triangle");
+  toast("⚡ 强化 → " + t.value);
+  clearTarget(); syncDOM(); updateHUD(); checkWin(); checkOver();
+}
+function doBomb(t){
+  if(busy || gameOver || !t || t.dead) return;
+  if(energy < SKILLS.bomb){ toast("能量不足，还需 " + (SKILLS.bomb - energy) + " ⚡"); clearTarget(); return; }
+  energy -= SKILLS.bomb;
+  t.dead = true;
+  tiles = tiles.filter(function(x){ return x !== t; });
+  rebuildGrid();
+  sfx(140, .22, "sawtooth", .07);
+  toast("💣 已爆破");
+  clearTarget(); syncDOM(); updateHUD(); checkOver();
+}
+function doShuffle(){
+  if(busy || gameOver) return;
+  if(energy < SKILLS.shuffle){ toast("能量不足，还需 " + (SKILLS.shuffle - energy) + " ⚡"); return; }
+  var live = liveTiles();
+  if(live.length < 2){ toast("没什么好打乱的"); return; }
+  var cells = live.map(function(t){ return { r:t.r, c:t.c }; });
+  var snap = snapshot();
+  shuffleArr(cells);
+  for(var i=0;i<live.length;i++){ live[i].r = cells[i].r; live[i].c = cells[i].c; live[i].pop = true; }
+  energy -= SKILLS.shuffle;
+  history.push(snap); if(history.length > HISTORY_MAX) history.shift();
+  sfx(520, .16, "square");
+  toast("🔀 全场重排");
+  clearTarget(); rebuildGrid(); syncDOM(); updateHUD(); checkOver();
+}
+function doUndo(){
+  if(busy) return;
+  if(!history.length){ toast("没有可以回溯的步骤"); return; }
+  if(energy < SKILLS.undo){ toast("能量不足，还需 " + (SKILLS.undo - energy) + " ⚡"); return; }
+  var s = history.pop();
+  restore(s);                       // 先把局面还原到上一步之前
+  energy = Math.max(0, energy - SKILLS.undo);   // 再扣回溯的费用（顺序不能反，否则会被快照覆盖）
+  sfx(300, .12, "sine");
+  toast("⏪ 已回溯");
+  clearTarget();
+}
+
+/* ============================================================
+   随机事件
+   ============================================================ */
+var EVENTS = [
+  { name:"🌧 甘霖", sub:"两块方块升级", run:function(){
+      var c = liveTiles().filter(function(t){ return t.type === NORMAL && t.value < 4096; });
+      shuffleArr(c);
+      c.slice(0,2).forEach(function(t){ t.value *= 2; t.pop = true; });
+      return true;
+  }},
+  { name:"❄ 寒潮", sub:"一块方块被冰封", run:function(){
+      var c = liveTiles().filter(function(t){ return t.type === NORMAL; });
+      if(!c.length) return false;
+      var t = pick(c); t.type = FROZEN; t.thaw = 3;
+      return true;
+  }},
+  { name:"⚡ 丰收", sub:"能量 +40", run:function(){ energy += 40; return true; }},
+  { name:"🌀 混沌", sub:"全场位置重排", run:function(){
+      var live = liveTiles(); if(live.length < 2) return false;
+      var cells = shuffleArr(live.map(function(t){ return { r:t.r, c:t.c }; }));
+      for(var i=0;i<live.length;i++){ live[i].r = cells[i].r; live[i].c = cells[i].c; live[i].pop = true; }
+      return true;
+  }},
+  { name:"☄ 陨石", sub:"随机摧毁一块方块", run:function(){
+      var live = liveTiles(); if(live.length < 2) return false;
+      var t = pick(live);
+      t.dead = true;
+      tiles = tiles.filter(function(x){ return x !== t; });
+      return true;
+  }}
+];
+
+function triggerEvent(){
+  var ev = pick(EVENTS), ok = false, guard = 0;
+  while(!ok && guard++ < 6){ ok = ev.run(); if(!ok) ev = pick(EVENTS); }
+  if(!ok) return;
+  rebuildGrid();
+  banner(ev.name, ev.sub);
+  sfx(420, .3, "triangle", .06);
+}
+
+/* ============================================================
+   结束 / 胜利判定
+   ============================================================ */
+function isPlayable(){
+  if(emptyCells().length) return true;
+  for(var r=0;r<N;r++) for(var c=0;c<N;c++){
+    var t = grid[r][c]; if(!t) continue;
+    if(c+1<N && grid[r][c+1] && canMerge(t, grid[r][c+1])) return true;
+    if(r+1<N && grid[r+1][c] && canMerge(t, grid[r+1][c])) return true;
+  }
+  return false;
+}
+function has2048(){
+  for(var i=0;i<tiles.length;i++) if(!tiles[i].dead && tiles[i].value >= 2048) return true;
+  return false;
+}
+function checkWin(){
+  if(won || !has2048()) return;
+  won = true;
+  showOverlay("🎉 达成 2048！", "分数 " + score + " · 用了 " + moves + " 步。继续挑战更高数字，或者重开一局。", "继续挑战", "重新开始", function(){
+    hideOverlay();
+  }, function(){
+    hideOverlay(); newGame(N);
+  });
+}
+function checkOver(){
+  if(gameOver || isPlayable()) return;
+  gameOver = true;
+  sfx(180, .5, "sawtooth", .06);
+  showOverlay("💀 无路可走", "本局分数 " + score + " · 最高分 " + best + " · " + moves + " 步。", "再来一局", "回溯一步", function(){
+    hideOverlay(); newGame(N);
+  }, function(){
+    if(history.length){
+      var s = history.pop();
+      restore(s);
+      energy = Math.max(0, energy);
+      hideOverlay();
+    }else{
+      hideOverlay(); newGame(N);
+    }
+  });
+}
+
+/* ============================================================
+   AI 提示（expectimax 两 ply + 启发式评估）
+   ============================================================ */
+function gridToNumbers(){
+  var g = [], r, c;
+  for(r=0;r<N;r++){
+    g.push([]);
+    for(c=0;c<N;c++){
+      var t = grid[r][c];
+      if(!t){ g[r].push(0); continue; }
+      if(t.type === WILD) g[r].push(8);
+      else g[r].push(t.value);
+    }
+  }
+  return g;
+}
+function simMove(g, dir){
+  var n = N, out = [], r, c;
+  for(r=0;r<n;r++){ out.push(new Array(n)); for(c=0;c<n;c++) out[r][c] = g[r][c]; }
+  var moved = false, gained = 0;
+
+  function lineCoords(dir){
+    var L = [], line, i;
+    if(dir === "left" || dir === "right"){
+      for(r=0;r<n;r++){ line=[]; for(c=0;c<n;c++) line.push([r,c]); if(dir==="right") line.reverse(); L.push(line); }
+    }else{
+      for(c=0;c<n;c++){ line=[]; for(r=0;r<n;r++) line.push([r,c]); if(dir==="down") line.reverse(); L.push(line); }
+    }
+    return L;
+  }
+  var lines = lineCoords(dir);
+  for(var li=0; li<lines.length; li++){
+    var line = lines[li], vals = [], i;
+    for(i=0;i<line.length;i++){ var v = out[line[i][0]][line[i][1]]; if(v) vals.push(v); }
+    var res = [];
+    for(i=0;i<vals.length;i++){
+      if(res.length && res[res.length-1] === vals[i]){ res[res.length-1] *= 2; gained += res[res.length-1]; }
+      else res.push(vals[i]);
+    }
+    for(i=0;i<line.length;i++){
+      var nv = i < res.length ? res[i] : 0;
+      if(out[line[i][0]][line[i][1]] !== nv) moved = true;
+      out[line[i][0]][line[i][1]] = nv;
+    }
+  }
+  return { grid: out, moved: moved, gained: gained };
+}
+function evalBoard(g){
+  var n = N, r, c, empty = 0, smooth = 0, mono = 0, maxV = 0;
+  for(r=0;r<n;r++) for(c=0;c<n;c++) if(!g[r][c]) empty++;
+  for(r=0;r<n;r++){
+    for(c=0;c<n;c++){
+      var v = g[r][c]; if(!v) continue;
+      if(v > maxV) maxV = v;
+      if(c+1<n && g[r][c+1]) smooth -= Math.abs(log2(v) - log2(g[r][c+1]));
+      if(r+1<n && g[r+1][c]) smooth -= Math.abs(log2(v) - log2(g[r+1][c]));
+    }
+  }
+  for(r=0;r<n;r++){
+    var inc = 0, dec = 0;
+    for(c=1;c<n;c++){
+      var a = g[r][c-1] ? log2(g[r][c-1]) : 0, b = g[r][c] ? log2(g[r][c]) : 0;
+      if(a > b) dec += b - a; else inc += a - b;
+    }
+    mono += Math.max(inc, dec);
+  }
+  for(c=0;c<n;c++){
+    var inc2 = 0, dec2 = 0;
+    for(r=1;r<n;r++){
+      var a2 = g[r-1][c] ? log2(g[r-1][c]) : 0, b2 = g[r][c] ? log2(g[r][c]) : 0;
+      if(a2 > b2) dec2 += b2 - a2; else inc2 += a2 - b2;
+    }
+    mono += Math.max(inc2, dec2);
+  }
+  var corner = 0;
+  if(maxV > 0){
+    var lv = log2(maxV);
+    var atCorner = (g[0][0] === maxV || g[0][n-1] === maxV || g[n-1][0] === maxV || g[n-1][n-1] === maxV);
+    corner = atCorner ? lv * 60 : -lv * 20;
+  }
+  return empty * 190 + smooth * 12 + mono * 32 + corner;
+}
+function chanceValue(g, depth){
+  var empties = [], r, c;
+  for(r=0;r<N;r++) for(c=0;c<N;c++) if(!g[r][c]) empties.push([r,c]);
+  if(!empties.length || depth <= 0) return evalBoard(g);
+  var sum = 0;
+  for(var i=0;i<empties.length;i++){
+    for(var k=0;k<2;k++){
+      var val = k === 0 ? 2 : 4, w = k === 0 ? 0.9 : 0.1;
+      var ng = g.map(function(row){ return row.slice(); });
+      ng[empties[i][0]][empties[i][1]] = val;
+      sum += w * playerValue(ng, depth - 1);
+    }
+  }
+  return sum / empties.length;
+}
+function playerValue(g, depth){
+  if(depth <= 0) return evalBoard(g);
+  var bestV = -Infinity, any = false;
+  for(var i=0;i<DIRS4.length;i++){
+    var s = simMove(g, DIRS4[i]);
+    if(!s.moved) continue;
+    any = true;
+    var v = chanceValue(s.grid, depth);
+    if(v > bestV) bestV = v;
+  }
+  return any ? bestV : evalBoard(g) - 100000;
+}
+function hint(){
+  if(busy || gameOver || targetMode) return;
+  var g = gridToNumbers(), bestDir = null, bestV = -Infinity;
+  for(var i=0;i<DIRS4.length;i++){
+    var s = simMove(g, DIRS4[i]);
+    if(!s.moved) continue;
+    var v = chanceValue(s.grid, 2);
+    if(v > bestV){ bestV = v; bestDir = DIRS4[i]; }
+  }
+  if(!bestDir){ toast("已经无路可走了…"); return; }
+  var label = { up:"↑ 上", down:"↓ 下", left:"← 左", right:"→ 右" }[bestDir];
+  toast("🔮 建议：" + label);
+  var arrow = document.createElement("div");
+  arrow.className = "banner show";
+  arrow.innerHTML = "<b>" + label + "</b><i>AI 建议的一步</i>";
+  arrow.style.zIndex = 39;
+  document.body.appendChild(arrow);
+  window.setTimeout(function(){ arrow.classList.remove("show"); }, 700);
+  window.setTimeout(function(){ arrow.remove(); }, 1100);
+}
+
+/* ============================================================
+   渲染
+   ============================================================ */
+function buildGridBg(){
+  gridBg.innerHTML = "";
+  document.documentElement.style.setProperty("--n", N);
+  for(var r=0;r<N;r++) for(var c=0;c<N;c++){
+    var d = document.createElement("div");
+    d.className = "cell";
+    d.style.setProperty("--r", r);
+    d.style.setProperty("--c", c);
+    gridBg.appendChild(d);
+  }
+  layout();
+}
+function layout(){
+  var w = layer.getBoundingClientRect().width;
+  if(!w) return;
+  document.documentElement.style.setProperty("--fs", (w / N * 0.36).toFixed(1) + "px");
+}
+function paintTile(el, t){
+  var face = el.firstChild, val = face.firstChild, badge = face.lastChild;
+  el.classList.toggle("frozen", t.type === FROZEN);
+  el.classList.toggle("wild", t.type === WILD);
+  el.classList.toggle("dead", !!t.dead);
+
+  var label = t.type === WILD ? "✦" : String(t.value);
+  if(val.textContent !== label) val.textContent = label;
+
+  var hue, sat, light;
+  if(t.type === WILD){ hue = 45; sat = 95; light = 50; }
+  else if(t.type === FROZEN){ hue = 192; sat = 26; light = 60; }
+  else {
+    var e = Math.max(1, Math.round(log2(Math.max(t.value, 2))));
+    hue = ((205 - (e - 1) * 21) % 360 + 360) % 360;
+    sat = 78; light = 45;
+  }
+  face.style.background = "linear-gradient(150deg, hsl(" + hue + " " + sat + "% " + (light + 11) + "%), hsl(" + hue + " " + sat + "% " + (light - 9) + "%))";
+  face.style.boxShadow = "0 0 14px hsla(" + hue + ",95%,60%,.42), inset 0 0 0 1px hsla(" + hue + ",95%,80%,.35)";
+  face.style.color = (t.type === FROZEN) ? "#0a1a2a" : "#ffffff";
+  face.style.fontSize = label.length >= 5 ? "calc(var(--fs) * .5)"
+                      : label.length === 4 ? "calc(var(--fs) * .62)"
+                      : label.length === 3 ? "calc(var(--fs) * .8)" : "var(--fs)";
+  badge.textContent = t.type === FROZEN ? "❄".repeat(Math.max(1, t.thaw)) : "";
+
+  if(t.pop){
+    el.classList.remove("pop");
+    void el.offsetWidth;
+    el.classList.add("pop");
+    t.pop = false;
+  }
+}
+function syncDOM(){
+  var seen = new Set(), i, t;
+  for(i=0;i<tiles.length;i++){
+    t = tiles[i];
+    seen.add(t.id);
+    var el = elMap.get(t.id);
+    if(!el){
+      el = document.createElement("div");
+      el.className = "tile";
+      el.dataset.id = t.id;
+      el.innerHTML = '<div class="face"><span class="val"></span><span class="badge"></span></div>';
+      el.style.setProperty("--r", t.r);
+      el.style.setProperty("--c", t.c);
+      paintTile(el, t);
+      layer.appendChild(el);
+      el.classList.add("new");
+      elMap.set(t.id, el);
+      continue;
+    }
+    el.style.setProperty("--r", t.r);
+    el.style.setProperty("--c", t.c);
+    paintTile(el, t);
+  }
+  elMap.forEach(function(el, id){ if(!seen.has(id)){ el.remove(); elMap.delete(id); } });
+}
+function updateHUD(){
+  $("score").textContent = score;
+  $("best").textContent = best;
+  $("energy").textContent = energy;
+  $("moves").textContent = moves;
+  $("streak").textContent = streak;
+  $("evt").textContent = eventCountdown;
+  $("streakBox").classList.toggle("hot", streak >= 2);
+  var btns = document.querySelectorAll(".skill");
+  for(var i=0;i<btns.length;i++){
+    var k = btns[i].dataset.skill;
+    btns[i].disabled = energy < SKILLS[k] || (k === "undo" && !history.length);
+    btns[i].classList.toggle("armed", targetMode === k);
+  }
+}
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  window.clearTimeout(toast._t);
+  toast._t = window.setTimeout(function(){ toastEl.classList.remove("show"); }, 1100);
+}
+function banner(title, sub){
+  $("bannerTitle").textContent = title;
+  $("bannerSub").textContent = sub || "";
+  bannerEl.classList.add("show");
+  window.clearTimeout(banner._t);
+  banner._t = window.setTimeout(function(){ bannerEl.classList.remove("show"); }, 1300);
+}
+function showOverlay(title, text, mainLabel, altLabel, onMain, onAlt){
+  $("ovTitle").textContent = title;
+  $("ovText").textContent = text;
+  var m = $("ovMain"), a = $("ovAlt");
+  m.textContent = mainLabel;
+  a.textContent = altLabel;
+  m.onclick = onMain;
+  a.onclick = onAlt;
+  overlay.hidden = false;
+}
+function hideOverlay(){ overlay.hidden = true; }
+
+/* ============================================================
+   音效
+   ============================================================ */
+function sfx(freq, dur, type, vol){
+  if(!soundOn) return;
+  try{
+    if(!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      audioCtx = new AC();
+    }
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "sine";
+    o.frequency.value = freq;
+    g.gain.value = vol || 0.04;
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + (dur || 0.09));
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + (dur || 0.09));
+  }catch(e){ /* 忽略音频错误 */ }
+}
+function sfxMerge(n){
+  if(n >= 2) sfx(880, .14, "triangle", .05);
+  else sfx(560, .07, "sine", .035);
+}
+
+/* ============================================================
+   存档
+   ============================================================ */
+function bestKey(){ return "n2048.best." + N; }
+function loadBest(){
+  try{ best = parseInt(window.localStorage.getItem(bestKey()) || "0", 10) || 0; }
+  catch(e){ best = 0; }
+}
+function saveBest(){
+  try{ window.localStorage.setItem(bestKey(), String(best)); }catch(e){}
+}
+
+/* ============================================================
+   开局
+   ============================================================ */
+function newGame(n){
+  if(n) N = n;
+  elMap.forEach(function(el){ el.remove(); });
+  elMap.clear();
+  tiles = []; nextId = 1; grid = makeGrid();
+  score = 0; energy = 0; moves = 0; streak = 0;
+  busy = false; gameOver = false; won = false;
+  history = []; eventCountdown = EVENT_EVERY; targetMode = null;
+  board.classList.remove("aiming");
+  hideOverlay();
+  buildGridBg();
+  rebuildGrid();
+  spawnTile(); spawnTile();
+  rebuildGrid();
+  loadBest();
+  syncDOM();
+  updateHUD();
+  $("btnSize").textContent = N + " × " + N;
+}
+
+/* ============================================================
+   输入
+   ============================================================ */
+function cellFromPoint(clientX, clientY){
+  var box = layer.getBoundingClientRect();
+  if(!box.width) return null;
+  var c = Math.floor((clientX - box.left) / (box.width / N));
+  var r = Math.floor((clientY - box.top) / (box.height / N));
+  if(r < 0 || c < 0 || r >= N || c >= N) return null;
+  return grid[r][c];
+}
+
+function bindInput(){
+  var keyMap = {
+    ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down",
+    a:"left", d:"right", w:"up", s:"down", A:"left", D:"right", W:"up", S:"down"
+  };
+  document.addEventListener("keydown", function(e){
+    if(!overlay.hidden || !$("help").hidden){
+      if(e.key === "Escape"){ hideOverlay(); $("help").hidden = true; clearTarget(); }
+      return;
+    }
+    if(targetMode && e.key === "Escape"){ clearTarget(); return; }
+    var dir = keyMap[e.key];
+    if(dir){ e.preventDefault(); move(dir); return; }
+    if(e.key === "z" || e.key === "Z"){ e.preventDefault(); doUndo(); return; }
+    if(e.key === "r" || e.key === "R"){ e.preventDefault(); newGame(N); return; }
+    if(e.key === "h" || e.key === "H"){ e.preventDefault(); hint(); return; }
+    if(e.key === "1"){ setTarget("boost"); return; }
+    if(e.key === "2"){ setTarget("bomb"); return; }
+    if(e.key === "3"){ doShuffle(); return; }
+  });
+
+  /* 触摸 / 拖动滑动 */
+  var sx = 0, sy = 0, tracking = false;
+  function down(x, y){ sx = x; sy = y; tracking = true; }
+  function up(x, y){
+    if(!tracking) return;
+    tracking = false;
+    var dx = x - sx, dy = y - sy;
+    if(Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if(Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? "right" : "left");
+    else move(dy > 0 ? "down" : "up");
+  }
+  board.addEventListener("touchstart", function(e){
+    if(e.touches.length !== 1) return;
+    down(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive:true });
+  board.addEventListener("touchend", function(e){
+    var t = e.changedTouches[0];
+    up(t.clientX, t.clientY);
+  }, { passive:true });
+  board.addEventListener("touchmove", function(e){ if(e.cancelable) e.preventDefault(); }, { passive:false });
+
+  board.addEventListener("mousedown", function(e){ down(e.clientX, e.clientY); });
+  board.addEventListener("mouseup", function(e){ up(e.clientX, e.clientY); });
+
+  /* 技能选点：点击棋盘 */
+  board.addEventListener("click", function(e){
+    if(!targetMode) return;
+    var t = cellFromPoint(e.clientX, e.clientY);
+    if(!t){ clearTarget(); return; }
+    if(targetMode === "boost") doBoost(t); else doBomb(t);
+  });
+
+  /* 技能按钮 */
+  var bar = $("skillbar");
+  bar.addEventListener("click", function(e){
+    var btn = e.target.closest(".skill");
+    if(!btn || btn.disabled) return;
+    var k = btn.dataset.skill;
+    if(k === "boost" || k === "bomb") setTarget(k);
+    else if(k === "shuffle") doShuffle();
+    else if(k === "undo") doUndo();
+  });
+
+  $("btnNew").addEventListener("click", function(){
+    if(score > 0 && !gameOver && !window.confirm("放弃当前这局，重新开始？")) return;
+    newGame(N);
+  });
+  $("btnHint").addEventListener("click", hint);
+  $("btnSize").addEventListener("click", function(){
+    newGame(N === 4 ? 5 : 4);
+    toast("切换到 " + N + " × " + N);
+  });
+  $("btnSound").addEventListener("click", function(){
+    soundOn = !soundOn;
+    $("btnSound").textContent = soundOn ? "🔊 音效" : "🔇 静音";
+    if(soundOn) sfx(700, .08, "sine");
+  });
+  $("btnHelp").addEventListener("click", function(){ $("help").hidden = false; });
+  $("helpClose").addEventListener("click", function(){ $("help").hidden = true; });
+  $("help").addEventListener("click", function(e){ if(e.target === $("help")) $("help").hidden = true; });
+  $("overlay").addEventListener("click", function(e){ if(e.target === $("overlay")) hideOverlay(); });
+
+  $("btnTheme").addEventListener("click", function(){
+    var dark = document.body.dataset.theme !== "light";
+    document.body.dataset.theme = dark ? "light" : "dark";
+    if(dark){
+      document.documentElement.style.setProperty("--bg0", "#eef3fb");
+      document.documentElement.style.setProperty("--bg1", "#dde6f5");
+      document.documentElement.style.setProperty("--txt", "#101a2c");
+      document.documentElement.style.setProperty("--dim", "#5b6b86");
+      document.documentElement.style.setProperty("--line", "rgba(30,70,140,.18)");
+    }else{
+      document.documentElement.style.setProperty("--bg0", "#070b16");
+      document.documentElement.style.setProperty("--bg1", "#0d1424");
+      document.documentElement.style.setProperty("--txt", "#e8f0ff");
+      document.documentElement.style.setProperty("--dim", "#7f90b0");
+      document.documentElement.style.setProperty("--line", "rgba(120,180,255,.18)");
+    }
+  });
+
+  window.addEventListener("resize", layout);
+}
+
+/* ============================================================
+   启动
+   ============================================================ */
+function boot(){
+  initDom();
+  bindInput();
+  newGame(4);
+}
+if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+else boot();
+
+/* 暴露给自动化测试（不影响浏览器使用） */
+if(typeof module !== "undefined" && module.exports){
+  module.exports = {
+    move: move, newGame: newGame, snapshot: snapshot, restore: restore,
+    get tiles(){ return tiles; }, get grid(){ return grid; },
+    get score(){ return score; }, get energy(){ return energy; },
+    get moves(){ return moves; }, get busy(){ return busy; },
+    set energy(v){ energy = v; },
+    doShuffle: doShuffle, doBoost: doBoost, doBomb: doBomb, doUndo: doUndo,
+    triggerEvent: triggerEvent, isPlayable: isPlayable, hint: hint,
+    _setBusy: function(v){ busy = v; },
+    _setGrid: function(g){ tiles = []; grid = g; },
+    addTile: addTile, liveTiles: liveTiles, rebuildGrid: rebuildGrid
+  };
+}
+})();
+</script>
+</body>
+</html>

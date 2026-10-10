@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+/_visual-*.html
+/_browser-profile/
+
+# 凭据绝不能进仓库
+.github-token
+.env
+*.token

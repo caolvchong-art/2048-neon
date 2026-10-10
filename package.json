@@ -1,0 +1,13 @@
+{
+  "name": "2048-neon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "2048 霓虹进化 —— 带能量技能、连击倍率、万能块、冰封块与随机事件的开源 2048",
+  "keywords": ["2048", "game", "html5", "javascript", "canvas-free", "puzzle"],
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/logic.test.js && node tests/static.test.js",
+    "preview": "node tests/make-preview.js",
+    "start": "npx --yes serve ."
+  }
+}
