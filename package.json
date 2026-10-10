@@ -6,7 +6,7 @@
   "keywords": ["2048", "game", "html5", "javascript", "canvas-free", "puzzle"],
   "license": "MIT",
   "scripts": {
-    "test": "node tests/logic.test.js && node tests/static.test.js",
+    "test": "node tests/logic.test.js && node tests/leaderboard.test.js && node tests/static.test.js",
     "preview": "node tests/make-preview.js",
     "start": "npx --yes serve ."
   }

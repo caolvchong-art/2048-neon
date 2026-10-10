@@ -13,7 +13,7 @@ const { execFileSync } = require("child_process");
 const repo = path.join(__dirname, "..");
 const src = fs.readFileSync(path.join(repo, "index.html"), "utf8");
 
-const needle = "  initDom();\n  bindInput();\n  newGame(4);";
+const needle = "  initDom();\n  bindInput();\n  bindLeaderboard();\n  newGame(4);";
 if (src.indexOf(needle) < 0) {
   console.error("找不到 boot() 注入点，index.html 改动过？");
   process.exit(1);
@@ -42,8 +42,21 @@ const helpPage = src.replace(needle, seed + "\n  $('help').hidden = false;");
 const boardFile = path.join(repo, "_visual-board.html");
 const helpFile = path.join(repo, "_visual-help.html");
 fs.writeFileSync(boardFile, boardPage);
+/* 排行榜面板预览：预置本机榜数据（不联网，避免截图依赖 Supabase） */
+const lbSeed = seed + `
+  /* === 预置排行榜数据（仅截图用）=== */
+  lbNameSet("霓虹玩家");
+  [["霓虹玩家",128460,3450,372],["夜行者",98230,2810,401],["小明",76400,2210,346],
+   ["卡密",61250,1980,298],["阿丙",45120,1520,297],["tester",33800,1204,281],
+   ["无名玩家",21400,860,249],["新手上路",9800,410,180]].forEach(function(d, i){
+    lbLocalAdd({ name: d[0], score: d[1], skill: d[2], tile: 2048, moves: d[3], size: 4, at: Date.now() - i * 3600000 });
+  });
+  lbOpen();`;
+const lbFile = path.join(repo, "_visual-lb.html");
+fs.writeFileSync(lbFile, src.replace(needle, lbSeed));
+
 fs.writeFileSync(helpFile, helpPage);
-console.log("已生成 _visual-board.html 和 _visual-help.html");
+console.log("已生成 _visual-board.html、_visual-help.html 和 _visual-lb.html");
 
 if (!process.argv.includes("--shot")) {
   console.log("\n手动截图示例：");
@@ -72,7 +85,8 @@ if (!browser) {
 
 const shots = [
   [boardFile, path.join(repo, "docs", "preview-board.png"), "560,1180"],
-  [helpFile, path.join(repo, "docs", "preview-help.png"), "560,1250"]
+  [helpFile, path.join(repo, "docs", "preview-help.png"), "560,1250"],
+  [lbFile, path.join(repo, "docs", "preview-leaderboard.png"), "560,920"]
 ];
 for (const [page, out, size] of shots) {
   try {

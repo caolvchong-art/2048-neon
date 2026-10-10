@@ -138,6 +138,36 @@
   .row button{flex:1; font:inherit; font-size:14px; padding:11px; border-radius:12px; cursor:pointer;
      color:#04121f; font-weight:700; border:0; background:linear-gradient(120deg,#7df9ff,#a98bff)}
   .row button.ghost{background:rgba(255,255,255,.08); color:var(--txt); font-weight:500}
+  /* ---- 排行榜 ---- */
+  .lb-tabs{display:flex; gap:6px; margin:10px 0 0}
+  .lb-tabs button{flex:1; font:inherit; font-size:13px; padding:7px 4px; border-radius:9px; cursor:pointer;
+     color:var(--txt); border:1px solid var(--line); background:rgba(255,255,255,.05)}
+  .lb-tabs button.on{background:linear-gradient(120deg,rgba(89,224,255,.30),rgba(180,110,255,.30));
+     border-color:rgba(140,220,255,.55); font-weight:700}
+  .lb-tabs.small{margin-top:6px}
+  .lb-tabs.small button{font-size:12px; padding:5px 4px}
+  .lb-name{display:flex; gap:6px; align-items:center; margin:10px 0 8px}
+  .lb-name label{font-size:12px; color:var(--dim); white-space:nowrap}
+  .lb-name input{flex:1; min-width:0; font:inherit; font-size:13px; padding:7px 9px; border-radius:9px;
+     color:var(--txt); background:rgba(255,255,255,.07); border:1px solid var(--line)}
+  .lb-name button{font:inherit; font-size:12px; padding:7px 10px; border-radius:9px; cursor:pointer;
+     color:var(--txt); border:1px solid var(--line); background:rgba(255,255,255,.05)}
+  .lb-list{max-height:44vh; overflow:auto; border-radius:10px; border:1px solid var(--line);
+     background:rgba(0,0,0,.20)}
+  .lb-row{display:grid; grid-template-columns:26px 1fr auto auto; gap:9px; align-items:center;
+     padding:8px 10px; font-size:13px; border-bottom:1px solid rgba(255,255,255,.05)}
+  .lb-row:last-child{border-bottom:0}
+  .lb-row.top1{background:linear-gradient(90deg,rgba(255,215,106,.20),transparent)}
+  .lb-row.top2{background:linear-gradient(90deg,rgba(205,220,240,.14),transparent)}
+  .lb-row.top3{background:linear-gradient(90deg,rgba(214,160,110,.14),transparent)}
+  .lb-rank{color:var(--dim); text-align:right; font-variant-numeric:tabular-nums}
+  .lb-row.top1 .lb-rank,.lb-row.top2 .lb-rank,.lb-row.top3 .lb-rank{color:var(--gold); font-weight:700}
+  .lb-nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .lb-sc{font-weight:700; font-variant-numeric:tabular-nums}
+  .lb-sk{font-size:11px; color:var(--acc); font-variant-numeric:tabular-nums}
+  .lb-empty{padding:24px 12px; text-align:center; color:var(--dim); font-size:13px}
+  .lb-msg{min-height:17px; margin-top:8px; font-size:12px; line-height:1.6; color:var(--dim)}
+  .lb-msg.err{color:#ff9090}
   @media (max-width:420px){ .box{min-width:62px} .box b{font-size:16px} .stat{font-size:11px} }
 </style>
 </head>
@@ -172,6 +202,7 @@
 
   <div class="actions">
     <button class="primary" id="btnNew">新游戏</button>
+    <button id="btnBoard">🏆 排行</button>
     <button id="btnHint">🔮 提示</button>
     <button id="btnSize">4 × 4</button>
     <button id="btnSound">🔊 音效</button>
@@ -194,6 +225,34 @@
     <div class="row">
       <button id="ovMain">再来一局</button>
       <button class="ghost" id="ovAlt">继续挑战</button>
+    </div>
+    <div class="row" id="ovSubmitRow" hidden>
+      <button id="ovSubmit">🏆 提交到全球榜</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="lbPanel" hidden>
+  <div class="dialog">
+    <h2>🏆 排行榜</h2>
+    <div class="lb-tabs" id="lbSource">
+      <button data-src="local" class="on">本机榜</button>
+      <button data-src="global">全球榜</button>
+    </div>
+    <div class="lb-tabs small" id="lbSizeTabs">
+      <button data-size="4" class="on">4 × 4</button>
+      <button data-size="5">5 × 5</button>
+    </div>
+    <div class="lb-name">
+      <label>昵称</label>
+      <input id="lbName" maxlength="16" placeholder="1–16 个字符" autocomplete="off">
+      <button id="lbSaveName">保存</button>
+    </div>
+    <div class="lb-list" id="lbList"></div>
+    <div class="lb-msg" id="lbMsg"></div>
+    <div class="row">
+      <button id="lbSubmit">提交本局成绩</button>
+      <button class="ghost" id="lbClose">关闭</button>
     </div>
   </div>
 </div>
@@ -605,6 +664,7 @@ function has2048(){
 function checkWin(){
   if(won || !has2048()) return;
   won = true;
+  lbShowSubmitRow(true);
   showOverlay("🎉 达成 2048！", "分数 " + score + " · 用了 " + moves + " 步。继续挑战更高数字，或者重开一局。", "继续挑战", "重新开始", function(){
     hideOverlay();
   }, function(){
@@ -615,6 +675,8 @@ function checkOver(){
   if(gameOver || isPlayable()) return;
   gameOver = true;
   sfx(180, .5, "sawtooth", .06);
+  lbRecordLocal();                 // 自动记进本机榜
+  lbShowSubmitRow(true);           // 显示「提交到全球榜」按钮
   showOverlay("💀 无路可走", "本局分数 " + score + " · 最高分 " + best + " · " + moves + " 步。", "再来一局", "回溯一步", function(){
     hideOverlay(); newGame(N);
   }, function(){
@@ -877,6 +939,312 @@ function showOverlay(title, text, mainLabel, altLabel, onMain, onAlt){
 function hideOverlay(){ overlay.hidden = true; }
 
 /* ============================================================
+   排行榜（本机榜 + Supabase 全球榜）
+   ------------------------------------------------------------
+   安全说明：这里的 publishable key 是**设计上就公开**的，
+   会随页面一起发布。真正的权限由 Supabase 的行级安全策略保证：
+   匿名角色只有 SELECT 和 INSERT，没有 UPDATE / DELETE，
+   所以任何人都无法篡改或清空别人的成绩。
+   ============================================================ */
+var SB = {
+  url: "https://nsxkpnoudpignikrrvts.supabase.co/rest/v1",
+  key: "sb_publishable_PNgyJ0vRkwyoMQE9Y_UFNg_bSPm4SLO",
+  table: "leaderboard_sum"
+};
+var LB_TOP = 10;          // 榜单展示条数
+var LB_KEEP = 20;         // 本机榜保留条数
+var LB_NAME_KEY = "n2048.name";
+var lbSource = "local";   // local | global
+var lbSize = 4;           // 当前查看的棋盘尺寸
+var lbCache = {};         // size -> { rows, at, err }
+var lbRecorded = false;   // 本局是否已记入本机榜
+
+function lbSay(text, isErr){
+  var el = $("lbMsg");
+  if(!el) return;
+  el.textContent = text || "";
+  el.className = "lb-msg" + (isErr ? " err" : "");
+}
+
+/* 昵称清洗：去掉控制字符、压平空白、限长。
+   数据库那边还有 CHECK (char_length between 1 and 16) 兜底。 */
+function lbSanitizeName(s){
+  s = String(s === null || s === undefined ? "" : s);
+  s = s.replace(/[\u0000-\u001f\u007f]/g, " ");
+  s = s.replace(/\s+/g, " ").trim();
+  if(!s) return "";
+  return s.slice(0, 16);   // JS 按 UTF-16 截断，不会超过数据库的 16 个字符上限
+}
+
+function lbNameGet(){
+  try{ return window.localStorage.getItem(LB_NAME_KEY) || ""; }catch(e){ return ""; }
+}
+function lbNameSet(n){
+  try{ window.localStorage.setItem(LB_NAME_KEY, n); }catch(e){}
+}
+
+/* 效率分：每步平均得分 ×10。奖励高效打法，而不是拖时间刷分。 */
+function lbEfficiency(sc, mv){
+  if(!mv || mv <= 0 || !isFinite(mv) || !isFinite(sc)) return 0;
+  var v = Math.round((sc / mv) * 10);
+  if(!isFinite(v) || v < 0) return 0;
+  return Math.min(v, 999999);
+}
+
+function maxTileValue(){
+  var m = 0;
+  for(var i=0;i<tiles.length;i++){
+    var t = tiles[i];
+    if(!t.dead && t.value > m) m = t.value;
+  }
+  return m;
+}
+
+/* ---------- 本机榜 ---------- */
+function lbLocalKey(size){ return "n2048.lb." + size; }
+function lbLocalAll(size){
+  try{
+    var raw = window.localStorage.getItem(lbLocalKey(size));
+    var a = raw ? JSON.parse(raw) : [];
+    return Object.prototype.toString.call(a) === "[object Array]" ? a : [];
+  }catch(e){ return []; }
+}
+function lbLocalAdd(entry){
+  var list = lbLocalAll(entry.size);
+  list.push(entry);
+  list.sort(function(a, b){ return b.score - a.score; });
+  list = list.slice(0, LB_KEEP);
+  try{ window.localStorage.setItem(lbLocalKey(entry.size), JSON.stringify(list)); }catch(e){}
+  return list;
+}
+function lbLocalTop(size, n){ return lbLocalAll(size).slice(0, n || LB_TOP); }
+
+/* ---------- 全球榜（Supabase REST，纯 fetch，无第三方 SDK） ---------- */
+function lbHeaders(extra){
+  var h = { "apikey": SB.key, "Authorization": "Bearer " + SB.key };
+  if(extra){
+    for(var k in extra){
+      if(Object.prototype.hasOwnProperty.call(extra, k)) h[k] = extra[k];
+    }
+  }
+  return h;
+}
+function lbFetch(url, opts, timeoutMs){
+  opts = opts || {};
+  if(typeof AbortController !== "function") return window.fetch(url, opts);
+  var ctl = new AbortController();
+  opts.signal = ctl.signal;
+  var timer = window.setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, timeoutMs || 9000);
+  return window.fetch(url, opts).then(function(r){ window.clearTimeout(timer); return r; },
+                                     function(e){ window.clearTimeout(timer); throw e; });
+}
+function lbGlobalUrl(size){
+  return SB.url + "/" + SB.table +
+    "?select=player_name,rank_score,skill_points,board_size,created_at" +
+    "&board_size=eq." + encodeURIComponent(size) +
+    "&order=rank_score.desc,created_at.asc" +
+    "&limit=" + LB_TOP;
+}
+function lbLoadGlobal(size){
+  return lbFetch(lbGlobalUrl(size), { headers: lbHeaders({ "Accept": "application/json" }) }, 9000)
+    .then(function(r){
+      if(!r.ok){
+        return r.text().then(function(t){
+          throw new Error("HTTP " + r.status + " " + String(t).slice(0, 140));
+        });
+      }
+      return r.json();
+    })
+    .then(function(rows){
+      if(Object.prototype.toString.call(rows) !== "[object Array]") return [];
+      return rows.map(function(x){
+        return {
+          name:  String(x.player_name === null || x.player_name === undefined ? "" : x.player_name),
+          score: Number(x.rank_score) || 0,
+          skill: Number(x.skill_points) || 0,
+          at:    Date.parse(x.created_at) || 0
+        };
+      });
+    });
+}
+function lbSubmitGlobal(entry){
+  return lbFetch(SB.url + "/" + SB.table, {
+    method: "POST",
+    headers: lbHeaders({ "Content-Type": "application/json", "Prefer": "return=minimal" }),
+    body: JSON.stringify({
+      player_name:  entry.name,
+      rank_score:   entry.score,
+      skill_points: entry.skill,
+      board_size:   entry.size
+    })
+  }, 12000).then(function(r){
+    if(!r.ok){
+      return r.text().then(function(t){
+        throw new Error("HTTP " + r.status + " " + String(t).slice(0, 160));
+      });
+    }
+    return true;
+  });
+}
+
+/* ---------- 渲染 ---------- */
+function lbRowEl(rank, r){
+  var d = document.createElement("div");
+  d.className = "lb-row" + (rank <= 3 ? " top" + rank : "");
+  var a = document.createElement("span"); a.className = "lb-rank"; a.textContent = String(rank);
+  // 用 textContent 而不是 innerHTML：昵称里就算写 <img onerror=...> 也只会当纯文本显示
+  var b = document.createElement("span"); b.className = "lb-nm";   b.textContent = r.name;
+  var c = document.createElement("span"); c.className = "lb-sc";   c.textContent = String(r.score);
+  var e = document.createElement("span"); e.className = "lb-sk";   e.textContent = "⚡" + r.skill;
+  d.appendChild(a); d.appendChild(b); d.appendChild(c); d.appendChild(e);
+  return d;
+}
+function lbRender(){
+  var host = $("lbList");
+  if(!host) return;
+  host.innerHTML = "";
+
+  var tabs = $("lbSource").children, i;
+  for(i=0;i<tabs.length;i++) tabs[i].classList.toggle("on", tabs[i].dataset.src === lbSource);
+  var st = $("lbSizeTabs").children;
+  for(i=0;i<st.length;i++) st[i].classList.toggle("on", Number(st[i].dataset.size) === lbSize);
+
+  var rows = (lbSource === "local") ? lbLocalTop(lbSize) : ((lbCache[lbSize] || {}).rows || []);
+  if(!rows.length){
+    var empty = document.createElement("div");
+    empty.className = "lb-empty";
+    empty.textContent = (lbSource === "local")
+      ? "本机还没有记录。玩一局结束时会自动记进来。"
+      : "全球榜暂无数据，或还没加载完成。";
+    host.appendChild(empty);
+    return;
+  }
+  for(i=0;i<rows.length;i++) host.appendChild(lbRowEl(i + 1, rows[i]));
+}
+function lbLoadGlobalInto(size){
+  var host = $("lbList");
+  if(host){
+    host.innerHTML = "";
+    var l = document.createElement("div");
+    l.className = "lb-empty";
+    l.textContent = "加载中…";
+    host.appendChild(l);
+  }
+  lbSay("");
+  lbLoadGlobal(size).then(function(rows){
+    lbCache[size] = { rows: rows, at: Date.now() };
+    if(lbSource === "global" && lbSize === size){
+      lbRender();
+      if(!rows.length) lbSay("还没有 " + size + "×" + size + " 的记录，去抢第一吧。");
+    }
+  }).catch(function(err){
+    lbCache[size] = { rows: [], err: err.message };
+    if(lbSource === "global" && lbSize === size){
+      lbRender();
+      lbSay("全球榜加载失败：" + err.message +
+            "（Supabase 免费项目闲置约一周会自动暂停，需去控制台恢复）", true);
+    }
+  });
+}
+
+/* ---------- 交互 ---------- */
+function lbOpen(){
+  lbSize = N;                       // 默认看当前棋盘尺寸
+  $("lbName").value = lbNameGet();
+  $("lbPanel").hidden = false;
+  if(lbSource === "global"){ lbLoadGlobalInto(lbSize); }
+  else { lbSay(""); lbRender(); }
+}
+function lbClose(){ $("lbPanel").hidden = true; }
+function lbShowSubmitRow(on){
+  var r = $("ovSubmitRow");
+  if(r) r.hidden = !on;
+}
+
+/* 一局结束时记入本机榜（不自动上传，避免没经同意就把成绩发出去） */
+function lbRecordLocal(){
+  if(score <= 0) return;
+  var nm = lbSanitizeName(lbNameGet()) || "无名玩家";
+  lbLocalAdd({
+    name: nm, score: score, skill: lbEfficiency(score, moves),
+    tile: maxTileValue(), moves: moves, size: N, at: Date.now()
+  });
+  lbRecorded = true;
+}
+
+function lbSubmit(){
+  var el = $("lbName");
+  var typed = el ? el.value : "";
+  var nm = lbSanitizeName(typed) || lbSanitizeName(lbNameGet());
+  if(!nm){ lbSay("先给自己起个昵称（1–16 个字符）", true); if(el) el.focus(); return; }
+  if(score <= 0){ lbSay("还没有分数可以提交，先玩一局。", true); return; }
+
+  lbNameSet(nm);
+  if(el) el.value = nm;
+
+  var entry = {
+    name: nm, score: score, skill: lbEfficiency(score, moves),
+    tile: maxTileValue(), moves: moves, size: N, at: Date.now()
+  };
+  lbLocalAdd(entry);        // 无论上传成功与否，本机榜先记上
+  lbRecorded = true;
+
+  lbSay("提交中…");
+  var btns = [$("lbSubmit"), $("ovSubmit")], i;
+  for(i=0;i<btns.length;i++) if(btns[i]) btns[i].disabled = true;
+
+  lbSubmitGlobal(entry).then(function(){
+    lbSay("✅ 已提交到全球榜！");
+    if(lbSource === "global") lbLoadGlobalInto(lbSize); else lbRender();
+  }).catch(function(err){
+    lbSay("❌ 提交失败：" + err.message + "（成绩已记入本机榜）", true);
+  }).then(function(){
+    for(i=0;i<btns.length;i++) if(btns[i]) btns[i].disabled = false;
+  });
+}
+
+function bindLeaderboard(){
+  $("btnBoard").addEventListener("click", lbOpen);
+  $("lbClose").addEventListener("click", lbClose);
+  $("lbSubmit").addEventListener("click", lbSubmit);
+  $("lbPanel").addEventListener("click", function(e){
+    if(e.target === $("lbPanel")) lbClose();
+  });
+  $("ovSubmit").addEventListener("click", function(){
+    var nm = lbSanitizeName(lbNameGet());
+    hideOverlay();
+    if(!nm){                       // 没昵称就先打开面板让他填
+      lbOpen();
+      lbSay("先填个昵称，再点「提交本局成绩」", true);
+      $("lbName").focus();
+      return;
+    }
+    lbSubmit();
+  });
+  $("lbSaveName").addEventListener("click", function(){
+    var nm = lbSanitizeName($("lbName").value);
+    if(!nm){ lbSay("昵称不能为空", true); return; }
+    lbNameSet(nm);
+    $("lbName").value = nm;
+    lbSay("昵称已保存：" + nm);
+  });
+  $("lbSource").addEventListener("click", function(e){
+    var b = e.target.closest ? e.target.closest("button") : null;
+    if(!b || !b.dataset.src) return;
+    lbSource = b.dataset.src;
+    if(lbSource === "global"){ lbLoadGlobalInto(lbSize); }
+    else { lbSay(""); lbRender(); }
+  });
+  $("lbSizeTabs").addEventListener("click", function(e){
+    var b = e.target.closest ? e.target.closest("button") : null;
+    if(!b || !b.dataset.size) return;
+    lbSize = Number(b.dataset.size);
+    if(lbSource === "global"){ lbLoadGlobalInto(lbSize); }
+    else { lbSay(""); lbRender(); }
+  });
+}
+
+/* ============================================================
    音效
    ============================================================ */
 function sfx(freq, dur, type, vol){
@@ -924,6 +1292,8 @@ function newGame(n){
   score = 0; energy = 0; moves = 0; streak = 0;
   busy = false; gameOver = false; won = false;
   history = []; eventCountdown = EVENT_EVERY; targetMode = null;
+  lbRecorded = false;
+  lbShowSubmitRow(false);
   board.classList.remove("aiming");
   hideOverlay();
   buildGridBg();
@@ -954,8 +1324,8 @@ function bindInput(){
     a:"left", d:"right", w:"up", s:"down", A:"left", D:"right", W:"up", S:"down"
   };
   document.addEventListener("keydown", function(e){
-    if(!overlay.hidden || !$("help").hidden){
-      if(e.key === "Escape"){ hideOverlay(); $("help").hidden = true; clearTarget(); }
+    if(!overlay.hidden || !$("help").hidden || !$("lbPanel").hidden){
+      if(e.key === "Escape"){ hideOverlay(); $("help").hidden = true; $("lbPanel").hidden = true; clearTarget(); }
       return;
     }
     if(targetMode && e.key === "Escape"){ clearTarget(); return; }
@@ -1058,6 +1428,7 @@ function bindInput(){
 function boot(){
   initDom();
   bindInput();
+  bindLeaderboard();
   newGame(4);
 }
 if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
@@ -1075,7 +1446,18 @@ if(typeof module !== "undefined" && module.exports){
     triggerEvent: triggerEvent, isPlayable: isPlayable, hint: hint,
     _setBusy: function(v){ busy = v; },
     _setGrid: function(g){ tiles = []; grid = g; },
-    addTile: addTile, liveTiles: liveTiles, rebuildGrid: rebuildGrid
+    addTile: addTile, liveTiles: liveTiles, rebuildGrid: rebuildGrid,
+
+    /* 排行榜相关（供自动化测试） */
+    lbSanitizeName: lbSanitizeName,
+    lbEfficiency: lbEfficiency,
+    lbLocalAll: lbLocalAll, lbLocalAdd: lbLocalAdd, lbLocalTop: lbLocalTop,
+    lbGlobalUrl: lbGlobalUrl, lbLoadGlobal: lbLoadGlobal, lbSubmitGlobal: lbSubmitGlobal,
+    lbHeaders: lbHeaders, lbRowEl: lbRowEl, lbRecordLocal: lbRecordLocal, lbSubmit: lbSubmit,
+    get lbRecorded(){ return lbRecorded; },
+    set lbName(v){ lbNameSet(v); },
+    get lbName(){ return lbNameGet(); },
+    _sbTable: SB.table, _sbUrl: SB.url
   };
 }
 })();
