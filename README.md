@@ -10,8 +10,7 @@
 
 ## 🎮 在线试玩
 
-> 部署完成后把这一行换成你的地址：
-> `https://<你的用户名>.github.io/2048-neon/`
+**<https://caolvchong-art.github.io/2048-neon/>**
 
 ---
 

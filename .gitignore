@@ -6,6 +6,7 @@ Thumbs.db
 /_browser-profile/
 
 # 凭据绝不能进仓库
+.git-credentials-tmp
 .github-token
 .env
 *.token
